@@ -56,10 +56,10 @@ def extract_features(file_path):
 
     with wave.open(str(file_path), "rb") as wav:
         if wav.getframerate() != SAMPLE_RATE or wav.getnchannels() != 1 or wav.getsampwidth() != 2 or wav.getcomptype() != "NONE":
-            raise ValueError("Audio must be 48 kHz, mono, 16-bit PCM WAV.") # Match the C filtering system
+            raise ValueError("Audio must be 48 kHz, mono, 16-bit PCM WAV.") # Matches Adam's filtering layer
 
         while True:
-            frames = wav.readframes(SAMPLE_RATE * WINDOW_SECONDS) # Read 10 seconds at a time
+            frames = wav.readframes(SAMPLE_RATE * WINDOW_SECONDS) # Reads 10 seconds at a time
             if not frames:
                 break
 
