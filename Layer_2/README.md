@@ -1,1 +1,1 @@
-Placeholder for Layer 2
+Placeholder for Layer 2, John owns this subsystem
