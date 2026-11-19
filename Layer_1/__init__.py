@@ -1,6 +1,6 @@
 from Layer_1.features import spectrum_features
 from Layer_1.model import (
-    FilterIDModel,
+    FilterIdModel,
     evaluate,
     load_model,
     save_model,
@@ -8,7 +8,7 @@ from Layer_1.model import (
 )
 
 __all__ = [
-    "FilterIDModel",
+    "FilterIdModel",
     "evaluate",
     "load_model",
     "save_model",
