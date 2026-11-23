@@ -3,7 +3,7 @@ from numbers import Integral, Real
 import numpy as np
 from scipy import signal
 
-##Filter Config and Constants
+#filter Config and Constants
 
 FILTER_TYPES = ("lowpass", "highpass", "bandpass")
 FAMILIES = ("butter", "cheby1", "cheby2", "ellip")
@@ -11,15 +11,17 @@ FAMILIES = ("butter", "cheby1", "cheby2", "ellip")
 DEFAULT_PASSBAND_RIPPLE_DB = 1.0
 DEFAULT_STOPBAND_ATTEN_DB = 40.0
 
+#allowed keys in a filter specification dict
 _SPEC_KEYS = {"type", "family", "order", "cutoff", "passband_ripple_db", "stopband_atten_db"}
 
+#filter families that accept ripple/attenuation params
 _FAMILIES_WITH_RIPPLE = ("cheby1", "ellip")
 _FAMILIES_WITH_ATTENUATION = ("cheby2", "ellip")
 
+#metadeta string describing how second order sections are applied
 _PROCESSING_NOTE = "causal sosfilt, single pass, zero initial state"
 
-#!COMMENT DESCRIBING FUNCTIONS FOR CHECKING
-#!ENSURE CHECKS ARE TRULY NEEDED 
+#validation helpers for filter specifications 
 def _check_keys(spec: dict) -> None:
     unknown = set(spec) - _SPEC_KEYS
     if unknown:
@@ -45,11 +47,13 @@ def _check_order(spec: dict, kind: str) -> int:
     if order is None:
         raise ValueError("filter spec is missing an 'order'")
 
+    #reject bools since bool is a subclass of int in python
     is_whole_number = isinstance(order, Integral) and not isinstance(order, bool)
     if not is_whole_number or order <= 0:
         raise ValueError(f"order must be a positive integer, got {order!r}")
 
     order_int = int(order)
+    #bandpass is constructed from two cascaded stages, so total order must be even
     if kind == "bandpass" and order_int % 2 != 0:
         raise ValueError(f"band-pass order must be even (total poles), got {order_int}")
 
@@ -68,6 +72,7 @@ def _check_bandpass_cutoff(cutoff, nyquist: float) -> list[float]:
         raise ValueError(f"band-pass cutoffs must be numbers, got {cutoff!r}")
 
     low_f, high_f = float(low), float(high)
+    #cutoffs must sit strictly inside (0, Nyquist) with low < high
     if not 0 < low_f < high_f < nyquist:
         raise ValueError(f"band-pass cutoffs must satisfy 0 < low < high < {nyquist} Hz, got {cutoff!r}")
 
@@ -79,7 +84,7 @@ def _check_single_cutoff(cutoff, kind: str, nyquist: float) -> float:
     if not is_number:
         raise ValueError(f"{kind} cutoff must be a number in Hz, got {cutoff!r}")
 
-    # Cast to float here so the type checker knows it's a float
+    #cast to float here so the type checker knows it's a float
     val = float(cutoff)
 
     if val <= 0 or val >= nyquist:
@@ -87,6 +92,7 @@ def _check_single_cutoff(cutoff, kind: str, nyquist: float) -> float:
     return val
 
 def normalize_spec(spec: dict, sample_rate: float) -> dict:
+    #validate and populate defaults into a complete, canonical filter spec
     _check_keys(spec)
     kind = _check_type(spec)
     family = _check_family(spec)
@@ -109,6 +115,7 @@ def normalize_spec(spec: dict, sample_rate: float) -> dict:
 
 
 def _design_one_side(full_spec: dict, kind: str, order: int, cutoff_hz: float, sample_rate: float) -> np.ndarray:
+    #design a single filter in second order sections for numerical stability
     sos = signal.iirfilter(
         order,
         cutoff_hz,
@@ -127,6 +134,7 @@ def design_filter(spec: dict, sample_rate: float) -> np.ndarray:
     if full["type"] != "bandpass":
         return _design_one_side(full, full["type"], full["order"], full["cutoff"], sample_rate)
 
+    #cascade a highpass and lowpass stage, splitting poles evenly between both sides
     low_hz, high_hz = full["cutoff"]
     poles_per_side = full["order"] // 2
 
@@ -144,6 +152,7 @@ def apply_filter(audio, sample_rate: float, spec: dict) -> tuple[np.ndarray, dic
     sos = design_filter(full, sample_rate)
     filtered = signal.sosfilt(sos, samples)
 
+    #build a provenance record containing the normalized spec, audio rate, and SOS ceoefficients
     record = dict(full)
     record["sample_rate"] = float(sample_rate)
     record["processing"] = _PROCESSING_NOTE
@@ -155,18 +164,19 @@ def apply_filter(audio, sample_rate: float, spec: dict) -> tuple[np.ndarray, dic
 def response_db(sos: np.ndarray, sample_rate: float, freqs) -> np.ndarray:
     freqs_hz = np.atleast_1d(np.asarray(freqs, dtype=np.float64))
     _, response = signal.sosfreqz(sos, worN=freqs_hz, fs=sample_rate)
+    #clamp magnitufde before log10 to avoid -inf
     gain = np.maximum(np.abs(response), 1e-300)
     return 20 * np.log10(gain)
 
 
-#!QUANTIZATION UTLITIES 
-#!ADD COMMENTS ABOUT THESE THINGS
+#quantization utilities
 
 STAGES = ("before_filter", "after_filter")
 MIN_BITS = 2
 MAX_BITS = 32
 
 def mono(audio) -> np.ndarray:
+    #ensure input is a 1-d float64 mon wavform
     samples = np.asarray(audio, dtype=np.float64)
     if samples.ndim != 1:
         raise ValueError(f"expected mono audio (1-D array), got shape {samples.shape}")
@@ -192,11 +202,13 @@ def quantize(audio, bits: int = 24, full_scale: float = 1.0, *, stage: str) -> t
         raise ValueError(f"stage must be one of {STAGES}, got {stage!r}")
 
     samples = mono(audio)
+    #signed integer code range mapped onto full scale
     step = full_scale / 2 ** (bits - 1)
     lowest_code = -(2 ** (bits - 1))
     highest_code = 2 ** (bits - 1) - 1
 
     codes = np.round(samples / step)
+    #track out of range samples before clamping stats are preserved
     too_low = codes < lowest_code
     too_high = codes > highest_code
     clipped = int(np.count_nonzero(too_low | too_high))
@@ -210,4 +222,5 @@ def quantize(audio, bits: int = 24, full_scale: float = 1.0, *, stage: str) -> t
         "clipped_samples": clipped,
     }
 
+    #dequantize back to floating point amplitude units
     return codes * step, record
