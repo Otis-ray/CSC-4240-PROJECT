@@ -6,22 +6,26 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+#core dsp operations, provenance/seed helpers, and spectral feature extraction
 from foundational.dsp import FILTER_TYPES, apply_filter, quantize
 from foundational.records import build_record, example_seed
 from Layer_1.features import spectrum_features
 
+#target RMS level for normalizing source audio before filtering
 SOURCE_RMS = 0.1
+#print/invoke proress callback for every N examples
 PROGRESS_EVERY = 500
 
 
 @dataclass
 class Dataset:
+    #container for feature matrix, target label dicts, and recording group ID
     features: np.ndarray
     labels: list[dict]
     groups: np.ndarray
     records: list[dict]
 
-
+#top level keys for the training settings dictionary
 _REQUIRED_SETTINGS = (
     "seed",
     "sample_rate",
@@ -34,6 +38,7 @@ _REQUIRED_SETTINGS = (
     "features",
 )
 
+#filte config keys required under settings
 _REQUIRED_FILTER_SETTINGS = (
     "types",
     "orders",
@@ -44,6 +49,7 @@ _REQUIRED_FILTER_SETTINGS = (
 )
 
 def check_settings(settings: dict) -> None:
+    #verify all required top-level settings exist
     for key in _REQUIRED_SETTINGS:
         if key not in settings:
             raise ValueError(f'settings are missing "{key}"')
@@ -57,6 +63,7 @@ def check_settings(settings: dict) -> None:
     if not 0 < settings["test_fraction"] < 1:
         raise ValueError(f"test_fraction must be between 0 and 1, got {settings['test_fraction']}")
 
+    #validate filter sub dict structure and bounds
     filters = settings["filters"]
     for key in _REQUIRED_FILTER_SETTINGS:
         if key not in filters:
@@ -73,6 +80,7 @@ def check_settings(settings: dict) -> None:
         if not filters["orders"].get(kind):
             raise ValueError(f'settings["filters"]["orders"] has no orders for {kind!r}')
 
+    #ensure low and high pass ranges do not overlap
     if filters["bandpass_low_hz"][1] >= filters["bandpass_high_hz"][0]:
         raise ValueError("bandpass_low_hz has to end below where bandpass_high_hz starts")
 
@@ -84,6 +92,7 @@ def wav_sources(source_dir, sample_rate: int, clip_seconds: float | None) -> lis
 
     sources = []
     for path in paths:
+        #inspect WAV header wihout loading full audio
         info = sf.info(path)
         if info.samplerate != sample_rate:
             raise ValueError(f"{path.name} is {info.samplerate} Hz, but this run uses {sample_rate} Hz")
@@ -95,6 +104,7 @@ def wav_sources(source_dir, sample_rate: int, clip_seconds: float | None) -> lis
             if info.frames < clip_samples:
                 raise ValueError(f"{path.name} is shorter than one {clip_seconds} s clip")
 
+        #keep _path internal so provenance records only expose public field
         sources.append({"recording_id": path.stem, "kind": "wav", "file": path.name, "_path": str(path)})
 
     return sources
@@ -108,11 +118,13 @@ def render_source(source: dict, seconds: float | None, sample_rate: int, rng: np
     if seconds is None:
         audio, _ = sf.read(source["_path"], dtype="float64")
     else:
+        #pick random valid start offset for fixed length clip
         n_samples = round(seconds * sample_rate)
         total_frames = sf.info(source["_path"]).frames
         start = int(rng.integers(0, total_frames - n_samples + 1))
         audio, _ = sf.read(source["_path"], start=start, frames=n_samples, dtype="float64")
 
+    #guard against silent segments before RMS normalization
     rms = np.sqrt(np.mean(audio**2))
     if rms == 0:
         raise ValueError(f"source {source['recording_id']} gave a silent clip")
@@ -121,6 +133,7 @@ def render_source(source: dict, seconds: float | None, sample_rate: int, rng: np
 
 
 def _log_uniform(rng: np.random.Generator, low: float, high: float) -> float:
+    #sample freqs via log() so lower and higher octaves are represented
     return float(np.exp(rng.uniform(np.log(low), np.log(high))))
 
 
@@ -128,6 +141,7 @@ def sample_filter(filters: dict, rng: np.random.Generator) -> dict:
     kind = str(rng.choice(filters["types"]))
     order = int(rng.choice(filters["orders"][kind]))
 
+    #bandpass uses high/low/
     if kind == "bandpass":
         low = _log_uniform(rng, *filters["bandpass_low_hz"])
         high = _log_uniform(rng, *filters["bandpass_high_hz"])
@@ -139,16 +153,19 @@ def sample_filter(filters: dict, rng: np.random.Generator) -> dict:
 
 
 def _public(source: dict) -> dict:
+    #strip private/internal keys prefixed with _
     return {key: value for key, value in source.items() if not key.startswith("_")}
 
 
 def make_example(index: int, sources: list[dict], settings: dict) -> tuple[np.ndarray, dict]:
+    #derive deterministic per example seed for reproducible generation
     seed = example_seed(settings["seed"], index)
     rng = np.random.default_rng(seed)
 
     source = sources[index // settings["examples_per_source"]]
     sample_rate = settings["sample_rate"]
 
+    #render normalized audio, apply a sampled filter, and simulate post  filter quantization
     audio = render_source(source, settings["clip_seconds"], sample_rate, rng)
     spec = sample_filter(settings["filters"], rng)
 
@@ -162,6 +179,7 @@ def make_example(index: int, sources: list[dict], settings: dict) -> tuple[np.nd
 
 
 def label_of(record: dict) -> dict:
+    #extract ground truth classification/regression targets from applied filter
     applied = record["filter"]
     return {"type": applied["type"], "order": applied["order"], "cutoff": applied["cutoff"]}
 
@@ -177,6 +195,7 @@ def build_dataset(settings: dict, progress=None) -> Dataset:
         audio, record = make_example(index, sources, settings)
         features.append(spectrum_features(audio, settings["sample_rate"], **settings["features"]))
         labels.append(label_of(record))
+        #use recording id as the grouping key for recording level train/test splitting
         groups.append(record["sources"][0]["recording_id"])
         records.append(record)
 
