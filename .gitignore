@@ -1,0 +1,51 @@
+# All recorded/generated audio (regardless of directory)
+*.wav
+*.wave
+*.flac
+*.aif
+*.aiff
+*.mp3
+*.ogg
+
+# All ML models/weights and binary feature caches
+*.joblib
+*.pkl
+*.pickle
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.safetensors
+*.h5
+*.hdf5
+*.keras
+*.npy
+*.npz
+*.pb
+*.tflite
+
+# Generated outputs, cached datasets, and recordings
+/results/
+/analysis_models/
+/Filters/processed/
+/Filters/dataset/clean/
+/Filters/dataset/noisy/
+
+# Compiled artifacts and Python caches
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.pyc
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+.env.*
+/Filters/filter
