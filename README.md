@@ -34,7 +34,7 @@ python -m pip install -r requirements.txt
 
 Download the verification WAV file and pretrained models from \
 https://drive.google.com/file/d/1yJGPyP7ZwDZJ5yGVMzZzs5qbkfgQXzpa/view?usp=sharing \
-Copy all the contents in the zip file into the ROOT PROJECT DIRECTORY
+Copy all the contents in the zip file into the ROOT PROJECT DIRECTORY \
 Overwrite and merge everything
 # After copying the three .joblib files run the following options:
 ```bash
