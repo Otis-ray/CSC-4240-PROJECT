@@ -40,6 +40,32 @@ def _ask_optional_cutoff() -> float | None:
         print('Enter a finite number between 0 and 24000 Hz, or leave blank.')
 
 
+
+def _select_wav() -> str:
+    """Choose a bundled demo location or provide a WAV path manually."""
+    options = {
+        '1': 'Filters/dataset/noisy/Speaker1.wav',
+        '2': '48kBounce_filt.wav',
+    }
+    print('\nSelect WAV recording:')
+    print('1. Speaker1 (Filters/dataset/noisy/Speaker1.wav)')
+    print('2. ASAPH demo (48kBounce_filt.wav in project root)')
+    print('3. Specify another WAV path')
+    while True:
+        choice = input('Select recording [1-3] [2]: ').strip() or '2'
+        if choice in options:
+            wav = options[choice]
+            break
+        if choice == '3':
+            while True:
+                wav = input('WAV file path: ').strip().strip('"')
+                if wav:
+                    break
+                print('Please enter a WAV file path.')
+            break
+        print('Enter 1, 2, or 3.')
+    return wav
+
 def _menu(parser) -> int:
     print('\n=== CSC-4240 AUDIO FORENSICS SYSTEM ===')
     print('1. Train models / generate full-length dataset')
@@ -82,7 +108,7 @@ def _menu(parser) -> int:
                             lf_window_seconds=lf_window,lf_events=lf_events,
                             save_full_dataset=export,custom_ranges=custom)
         print(f'Complete: {result}');return 0
-    wav=_ask('WAV recording','Filters/dataset/noisy/Speaker1.wav')
+    wav=_select_wav()
     skip=_ask_yes('Skip inverse filtering (direct Layer 2 diagnostic)?',False)
     model=str(LAYER1_MODEL)
     l2=str(LAYER2_MODEL)
