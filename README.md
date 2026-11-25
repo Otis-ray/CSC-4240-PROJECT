@@ -14,9 +14,7 @@ cd ~/CSC-4240-PROJECT-TEST
 # System dependencies
 
 ```bash
-sudo apt update
-sudo apt install -y python3 python3-pip python3-venv \
-    build-essential libfftw3-dev
+sudo apt install -y python3-venv build-essential libfftw3-dev
 ```
 # Compile C filter
 ```bash
@@ -27,19 +25,11 @@ make -C Filters
 python3 -m venv .venv
 source .venv/bin/activate
 ```
-# Python dependencies
+# Install all Python dependencies
 ```bash
-python -m pip install --upgrade pip setuptools wheel
-python -m pip install numpy scipy scikit-learn soundfile joblib
+python -m pip install -r requirements.txt
 ```
-# Verify dependencies
-```bash
-python -c "import numpy, scipy, sklearn, soundfile, joblib; print('Dependencies OK')"
-```
-# Verify application tests
-```bash
-python -m unittest discover -s Offline_app/tests -v
-```
+
 # Install model weights manually before analysis
 
 Download the verification WAV file and pretrained models from \
