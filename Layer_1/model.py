@@ -21,6 +21,7 @@ def _regressor(seed: int) -> HistGradientBoostingRegressor:
 
 
 class _OnlyChoice:
+    # fallback classifier when only a single label class appears in training data
     def __init__(self, value):
         self.classes = np.array([value])
 
@@ -29,10 +30,12 @@ class _OnlyChoice:
 
 
 def _with_slopes(features) -> np.ndarray:
+    # augment spectral band features with first order differences
     X = np.atleast_2d(np.asarray(features, dtype=np.float64))
     return np.hstack([X, np.diff(X, axis=1)])
 
 def cutoff_edges(kind: str, cutoff) -> list[float]:
+    # normalize scalar or cutoff specs into a list of Hz freqs
     return [float(cutoff[0]), float(cutoff[1])] if kind == "bandpass" else [float(cutoff)]
 
 
@@ -44,6 +47,7 @@ def _pick_rows(items: list, rows) -> list:
 
 
 class FilterIdModel:
+    # Model filter type, order, and cutoff frequencies hierarchically.
     def __init__(self, seed: int = 0):
         self.seed = seed
         self.type_model = None
@@ -57,11 +61,13 @@ class FilterIdModel:
         if len(X) != len(labels):
             raise ValueError(f"got {len(X)} feature rows but {len(labels)} labels")
 
+        # reset learned sub models and bounds on each call
         self.order_models, self.cutoff_models, self.cutoff_ranges = {}, {}, {}
 
         types = np.array([label["type"] for label in labels])
         self.type_model = _classifier(self.seed).fit(X, types)
 
+        # train per filter type order classifiers and cutoff regressors on matching subsets
         for kind in np.unique(types).tolist():
             rows = np.flatnonzero(types == kind)
             labels_of_kind = _pick_rows(labels, rows)
@@ -71,6 +77,7 @@ class FilterIdModel:
         return self
 
     def _fit_order(self, kind: str, X: np.ndarray, labels: list[dict]) -> None:
+        # HistGradientBoostingClassifier requires two distinct classes
         orders = np.array([label["order"] for label in labels])
         if len(np.unique(orders)) == 1:
             self.order_models[kind] = _OnlyChoice(orders[0])
@@ -80,10 +87,12 @@ class FilterIdModel:
 
     def _fit_cutoffs(self, kind: str, X: np.ndarray, labels: list[dict]) -> None:
         edges_hz = [cutoff_edges(kind, label["cutoff"]) for label in labels]
+        # Regress cutoffs in log2(Hz) so multiplicative errors are balanced.
         octaves = np.log2(edges_hz)
 
         regressors = [_regressor(self.seed).fit(X, octaves[:, edge]) for edge in range(octaves.shape[1])]
         self.cutoff_models[kind] = regressors
+                # Store observed octave bounds to clamp out-of-range predictions.
         self.cutoff_ranges[kind] = (octaves.min(axis=0), octaves.max(axis=0))
 
 
@@ -120,11 +129,13 @@ class FilterIdModel:
         self._check_trained()
         X = _with_slopes(features)
 
+        # force a given filter type instead of predicting it
         if kind is not None:
             results = self._given_type(X, kind)
             for result in results:
                 result["confidence"]["type"] = 1.0
             return results
+        # Check that the type classifier has been trained before prediction.
         type_model = self.type_model
         if type_model is None:
             raise RuntimeError("model is not trained")
@@ -134,6 +145,7 @@ class FilterIdModel:
         predicted_types = type_model.classes_[best_type]
 
         results = [{}] * len(X)
+        # batch sub predictions by predicted filter type
         for predicted in np.unique(predicted_types).tolist():
             rows = np.flatnonzero(predicted_types == predicted)
             results_for_type = self._given_type(X[rows], predicted)
@@ -145,6 +157,7 @@ class FilterIdModel:
 
 
 def split_by_recording(groups, test_fraction: float, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    # GroupShuffleSplit keeps examples from one recording in a single split.
     splitter = GroupShuffleSplit(n_splits=1, test_size=test_fraction, random_state=seed)
     return next(splitter.split(np.zeros(len(groups)), groups=groups))
 
@@ -154,6 +167,7 @@ def _accuracy(hits) -> float:
 
 
 def _scores_given_true_type(model: FilterIdModel, X: np.ndarray, labels: list[dict]) -> tuple[dict, dict]:
+    # Evaluate order and cutoff errors conditional on the true filter type.
     true_types = [label["type"] for label in labels]
     order_hits, cutoff_errors = {}, {}
 
@@ -173,6 +187,7 @@ def _scores_given_true_type(model: FilterIdModel, X: np.ndarray, labels: list[di
 
 
 def _type_confusion(predicted: list[dict], labels: list[dict]) -> dict:
+    # Build a nested type-confusion matrix.
     confusion = {}
     for result, label in zip(predicted, labels):
         true_type, guess = label["type"], result["spec"]["type"]
@@ -181,6 +196,7 @@ def _type_confusion(predicted: list[dict], labels: list[dict]) -> dict:
 
 
 def _scores_by_noise_stage(type_hits: np.ndarray, both_hits: np.ndarray, records: list[dict]) -> dict:
+    # Group evaluation accuracy by the first recorded damage stage.
     stages = np.array([r["damage"][0]["stage"] if r.get("damage") and len(r["damage"]) > 0 and "stage" in r["damage"][0] else "none" for r in records])
     by_stage = {}
     for stage in sorted(set(stages.tolist())):
