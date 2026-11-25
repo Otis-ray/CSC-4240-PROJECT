@@ -34,10 +34,8 @@ python -m pip install -r requirements.txt
 
 Download the verification WAV file and pretrained models from \
 https://drive.google.com/file/d/1yJGPyP7ZwDZJ5yGVMzZzs5qbkfgQXzpa/view?usp=sharing \
-Put the WAV file in the project root directory (/CSC-4240-PROJECT-TEST) \
-Merge the models directory with the project's models directory if already present. \
-Otherwise, just copy and paste. 
-
+Copy all the contents in the zip file into the ROOT PROJECT DIRECTORY
+Overwrite and merge everything
 # After copying the three .joblib files run the following options:
 ```bash
 python -m Offline_app menu
