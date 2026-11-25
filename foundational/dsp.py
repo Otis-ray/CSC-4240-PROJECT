@@ -119,6 +119,7 @@ def apply_filter(audio, sample_rate: float, spec: dict, *, executable: str | Pat
 
 
 def mono(audio) -> np.ndarray:
+    # Convert input to a mono, float64 waveform.
     samples = np.asarray(audio, dtype=np.float64)
     if samples.ndim != 1:
         raise ValueError(f"expected mono audio (1-D), got {samples.shape}")
@@ -133,8 +134,10 @@ def quantize(audio, bits: int = PCM_BITS, full_scale: float = 1.0, *, stage: str
     if stage not in STAGES:
         raise ValueError(f"stage must be one of {STAGES}")
     samples = mono(audio)
+    # Map normalized amplitudes to signed integer quantization levels.
     step = full_scale / 2 ** (bits - 1)
     lo, hi = -(2 ** (bits - 1)), 2 ** (bits - 1) - 1
     codes = np.round(samples / step)
+    # Count out-of-range codes before clipping and dequantization.
     clipped = int(np.count_nonzero((codes < lo) | (codes > hi)))
     return np.clip(codes, lo, hi) * step, {"bits": int(bits), "stage": stage, "full_scale": float(full_scale), "step": step, "clipped_samples": clipped}
