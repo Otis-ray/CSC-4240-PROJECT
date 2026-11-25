@@ -1,8 +1,8 @@
 # Clone
-cd ~
+cd ~ \
 git clone -b source-only-release \
     https://github.com/Otis-ray/CSC-4240-PROJECT.git \
-    CSC-4240-PROJECT-TEST
+    CSC-4240-PROJECT-TEST \
 
 cd ~/CSC-4240-PROJECT-TEST
 
