@@ -65,12 +65,22 @@ def _menu(parser) -> int:
         seconds=None if clip.lower() in ('full','none','null') else float(clip)
         count=int(_ask('Layer 1 examples per recording','10'))
         l1=_ask_yes('Train Layer 1?',True)
-        l2=_ask_yes('Train Layer 2?',True)
+        l2=_ask_yes('Train Layer 2 (full-band)?',True)
+        lf_train=_ask_yes('Train specialized LF model?',True)
+        lf_mode='standard'
+        lf_window=5.0
+        lf_events='layer2_noise_events.csv'
+        if lf_train:
+            lf_mode=_ask('LF training mode (standard/generalized)','standard').lower()
+            lf_window=float(_ask('LF training window (seconds)','5'))
+            lf_events=_ask('LF event annotation CSV','layer2_noise_events.csv')
         export=_ask_yes('Save 109 full-length forward/reverse WAV pairs? (large storage required)',False)
         events=_ask('Layer 2 Ardour events manifest','layer2_noise_events.json') if l2 else 'layer2_noise_events.json'
         result=train_models(audio_dir=audio,out=out,profile=profile,clip_seconds=seconds,
                             examples_per_source=count,events=events,train_layer1=l1,
-                            train_layer2=l2,save_full_dataset=export,custom_ranges=custom)
+                            train_layer2=l2,train_lf=lf_train,lf_mode=lf_mode,
+                            lf_window_seconds=lf_window,lf_events=lf_events,
+                            save_full_dataset=export,custom_ranges=custom)
         print(f'Complete: {result}');return 0
     wav=_ask('WAV recording','Filters/dataset/noisy/Speaker1.wav')
     skip=_ask_yes('Skip inverse filtering (direct Layer 2 diagnostic)?',False)
@@ -105,7 +115,7 @@ def main(argv=None) -> int:
     analyze.add_argument('--out',required=True)
     analyze.add_argument('--filter-bin',default=str(DEFAULT_FILTER))
     analyze.add_argument('--timeout',type=int,default=600)
-    train=sub.add_parser('train',help='Train Layer 1/Layer 2 and optionally save full WAV dataset')
+    train=sub.add_parser('train',help='Train Layer 1, full-band Layer 2, specialized LF; optionally save WAV dataset')
     train.add_argument('--audio-dir',required=True,help='Speaker WAV directory')
     train.add_argument('--out',required=True,help='NEW output directory')
     train.add_argument('--events',default='layer2_noise_events.json')
@@ -117,6 +127,13 @@ def main(argv=None) -> int:
     train.add_argument('--examples-per-source',type=int,default=10)
     train.add_argument('--skip-layer1',action='store_true')
     train.add_argument('--skip-layer2',action='store_true')
+    train.add_argument('--train-lf',action='store_true',help='Also train a specialized LF classifier')
+    train.add_argument('--lf-mode',choices=('standard','generalized'),default='standard',
+                       help='standard: one HP300/LP300 configuration (3 classes); generalized: 8 filter variants (2 classes)')
+    train.add_argument('--lf-events',default='layer2_noise_events.csv',help='Ground-truth noise regions CSV for LF')
+    train.add_argument('--lf-window-seconds',type=float,default=5.)
+    train.add_argument('--lf-trees',type=int,default=200,help='Generalized LF Random Forest tree count')
+    train.add_argument('--lf-max-speakers',type=int,default=0,help='Optional small smoke test; 0 = all available')
     train.add_argument('--save-full-dataset',action='store_true',help='Save 109 full-length forward/reverse WAV pairs')
     train.add_argument('--filter-bin',default=str(DEFAULT_FILTER))
     train.add_argument('--timeout',type=int,default=1800)
@@ -141,7 +158,9 @@ def main(argv=None) -> int:
                                clip_seconds=None if args.full_clips else args.clip_seconds,
                                examples_per_source=args.examples_per_source,events=args.events,
                                train_layer1=not args.skip_layer1,train_layer2=not args.skip_layer2,
-                               save_full_dataset=args.save_full_dataset,custom_ranges=ranges,
+                               train_lf=args.train_lf,lf_mode=args.lf_mode,lf_events=args.lf_events,
+                               lf_window_seconds=args.lf_window_seconds,lf_trees=args.lf_trees,
+                               lf_max_speakers=args.lf_max_speakers,save_full_dataset=args.save_full_dataset,custom_ranges=ranges,
                                filter_bin=args.filter_bin,timeout=args.timeout,layer1_settings=args.settings)
         print(f'Complete: {result}')
         return 0

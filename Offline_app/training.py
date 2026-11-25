@@ -16,6 +16,7 @@ from .analysis import ROOT, DEFAULT_FILTER, wav_info, sha256
 EXPECTED_DATASET_COUNT = 109
 DEFAULT_SETTINGS = ROOT / 'foundational' / 'settings.json'
 DEFAULT_EVENTS = ROOT / 'layer2_noise_events.json'
+DEFAULT_LF_EVENTS = ROOT / 'layer2_noise_events.csv'
 REALISTIC = {'highpass_cutoff_hz':[80.0,600.0], 'lowpass_cutoff_hz':[2000.0,8000.0],
              'bandpass_low_hz':[80.0,600.0], 'bandpass_high_hz':[2000.0,8000.0]}
 
@@ -139,6 +140,9 @@ def train_models(*, audio_dir: str|Path, out: str|Path, profile: str='realistic'
                  clip_seconds: float|None=60, examples_per_source: int=10,
                  events: str|Path=DEFAULT_EVENTS, train_layer1: bool=True,
                  train_layer2: bool=True, save_full_dataset: bool=False,
+                 train_lf: bool=False, lf_mode: str='standard',
+                 lf_events: str|Path=DEFAULT_LF_EVENTS, lf_window_seconds: float=5.0,
+                 lf_trees: int=200, lf_max_speakers: int=0,
                  custom_ranges:dict|None=None, filter_bin: str|Path=DEFAULT_FILTER,
                  timeout: int=1800, layer1_settings: str|Path=DEFAULT_SETTINGS) -> Path:
     audio=Path(audio_dir).expanduser().resolve(); dest=Path(out).expanduser().resolve()
@@ -146,12 +150,18 @@ def train_models(*, audio_dir: str|Path, out: str|Path, profile: str='realistic'
         raise TrainingError(f'Output directory exists; refusing overwrite: {dest}')
     if not audio.is_dir():
         raise TrainingError(f'Dataset folder not found: {audio}')
-    if not (train_layer1 or train_layer2 or save_full_dataset):
+    if not (train_layer1 or train_layer2 or train_lf or save_full_dataset):
         raise TrainingError('At least one training or export option must be selected')
     if not isinstance(examples_per_source,int) or examples_per_source<1:
         raise TrainingError('examples_per_source must be positive integer')
     if clip_seconds is not None and (not math.isfinite(clip_seconds) or clip_seconds<=0):
         raise TrainingError('clip_seconds must be positive or null')
+    if lf_mode not in ('standard','generalized'):
+        raise TrainingError('lf_mode must be standard or generalized')
+    if not math.isfinite(lf_window_seconds) or lf_window_seconds <= 0:
+        raise TrainingError('lf_window_seconds must be positive')
+    if lf_trees < 1 or lf_max_speakers < 0:
+        raise TrainingError('lf_trees must be positive and lf_max_speakers nonnegative')
     if timeout<1:
         raise TrainingError('timeout must be positive')
     base=json.loads(Path(layer1_settings).expanduser().resolve().read_text())
@@ -159,19 +169,23 @@ def train_models(*, audio_dir: str|Path, out: str|Path, profile: str='realistic'
     base['bits']=16; base['sample_rate']=48000
     base['filters']=resolve_ranges(base['filters'],profile,custom_ranges)
     binary=Path(filter_bin).expanduser().resolve()
-    if train_layer1 or save_full_dataset:
+    if train_layer1 or train_lf or save_full_dataset:
         if not binary.is_file():
             raise TrainingError(f'Missing C filter executable: {binary}')
         _validate_sources(audio,require_complete=save_full_dataset)
     eventfile=Path(events).expanduser().resolve()
     if train_layer2 and not eventfile.is_file():
         raise TrainingError(f'Noise event manifest missing: {eventfile}')
+    lf_eventfile=Path(lf_events).expanduser().resolve()
+    if train_lf and not lf_eventfile.is_file():
+        raise TrainingError(f'LF noise-event CSV missing: {lf_eventfile}')
     dest.mkdir(parents=True)
     manifest={'schema_version':1,'status':'running','created_utc':datetime.now(timezone.utc).isoformat(),
               'dataset':str(audio),'profile':profile,'filters':base['filters'],
               'clip_seconds':clip_seconds,'examples_per_source':examples_per_source,
               'layer1':{'status':'pending' if train_layer1 else 'skipped'},
               'layer2':{'status':'pending' if train_layer2 else 'skipped'},
+              'lf':{'status':'pending' if train_lf else 'skipped'},
               'full_dataset':{'status':'pending' if save_full_dataset else 'skipped'}}
     def save(): (dest/'training_manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     save()
@@ -188,6 +202,34 @@ def train_models(*, audio_dir: str|Path, out: str|Path, profile: str='realistic'
             l2model=dest/'layer2'/'noise_multilabel.joblib'
             _run([sys.executable,'-m','Layer_2.training_model','--manifest',str(index),'--output',str(l2model)])
             manifest['layer2']={'status':'complete','model':'layer2/noise_multilabel.joblib','metrics':'layer2/noise_multilabel_metrics.json','audio_index':'layer2_audio_index.json'};save()
+        if train_lf:
+            # These scripts train on event-labelled recordings with the same
+            # dataset as Layer 2. Their own speaker-level split is retained.
+            lf_out=dest/'lf'
+            if lf_mode=='standard':
+                cmd=[sys.executable,str(ROOT/'LF_experiment'/'lf_experiment.py'),'train',
+                     '--data-root',str(audio),'--events-csv',str(lf_eventfile),
+                     '--filter-exe',str(binary),'--out',str(lf_out),
+                     '--hp-order','2','--cutoff','300','--lp-order','4',
+                     '--window-seconds',str(lf_window_seconds)]
+                if lf_max_speakers:
+                    cmd.extend(['--max-speakers',str(lf_max_speakers)])
+            else:
+                cmd=[sys.executable,str(ROOT/'LF_experiment'/'lf_generalized.py'),
+                     '--data-root',str(audio),'--events-csv',str(lf_eventfile),
+                     '--filter-exe',str(binary),'--out',str(lf_out),
+                     '--window-seconds',str(lf_window_seconds),
+                     '--trees',str(lf_trees),'--preset','focused']
+                if lf_max_speakers:
+                    cmd.extend(['--max-speakers',str(lf_max_speakers)])
+            _run(cmd)
+            if not (lf_out/'model.joblib').is_file() or not (lf_out/'evaluation.json').is_file():
+                raise TrainingError('LF trainer exited without model.joblib and evaluation.json')
+            manifest['lf']={'status':'complete','mode':lf_mode,
+                            'model':'lf/model.joblib','metrics':'lf/evaluation.json',
+                            'events_csv':str(lf_eventfile),
+                            'window_seconds':lf_window_seconds}
+            save()
         if save_full_dataset:
             path=generate_full_dataset(audio,dest/'full_length_dataset',base['filters'],int(base['seed']),binary,timeout=timeout)
             manifest['full_dataset']={'status':'complete','manifest':str(path.relative_to(dest))};save()
