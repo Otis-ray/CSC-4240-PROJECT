@@ -1,3 +1,5 @@
+# Tested and supported only on Ubuntu 24.04.4 LTS
+
 # Clone the `source-only-release` branch:
 
 ```bash
