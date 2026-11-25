@@ -44,8 +44,8 @@ Enter '2' to select Analyze WAV recording \
 Enter '2' again to select 48kBounce_filt.wav, which you should have placed in the project root\
 Select 'N' to perform the inverse filtering (direct Layer 2 diagnostic) \
 Leave LF isolation LP cutoff blank (just press enter) \ 
-Keep the default output directory (each run cannot be overwritten, so if you run this again, you will have to specify a new name)\
-An example would be results/analysis-new2\
+Keep the default output directory (each run cannot be overwritten, so if you run this again, you will have to specify a new name) \
+An example would be results/analysis-new2 \
 # The terminal output should resemble: 
 [1/3] Running Layer 1 prediction...\
 [2/3] Running C inverse filter...\
