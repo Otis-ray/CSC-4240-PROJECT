@@ -6,13 +6,15 @@ import numpy as np
 from foundational.dsp import STAGES 
 from typing import Any, cast
 
+ # Schema version embedded in generated provenance records.
 SCHEMA_VERSION = 2
 
-#!ADD COMMENTS EXPLAINING CODE
+# Read settings and validate the nonnegative random seed.
 def load_settings(path: str | Path) -> dict:
     settings = json.loads(Path(path).read_text(encoding="utf-8"))
     seed = settings.get("seed")
 
+    # Exclude booleans, which Python treats as integer subclasses.
     is_whole_number = isinstance(seed, Integral) and not isinstance(seed, bool)
     if seed is None or not is_whole_number or seed < 0:
         raise ValueError(f'settings need a non-negative integer "seed", got {seed!r}')
@@ -24,6 +26,7 @@ def example_seed(base_seed: int, index: int) -> int:
     if base_seed < 0 or index < 0:
         raise ValueError("base_seed and index must be non-negative")
 
+    # Derive a deterministic per-example 32-bit seed from the base seed and index.
     mixer = np.random.SeedSequence([base_seed, index])
     state = mixer.generate_state(1, dtype=np.uint32)
     return int(state[0])
@@ -49,6 +52,7 @@ def _check_sources(sources) -> None:
     if len(sources) == 0:
         raise ValueError("an example needs at least one source")
 
+    # Require a nonempty recording identifier for every source.
     for source in sources:
         recording_id = source.get("recording_id")
         if not isinstance(recording_id, str) or recording_id == "":
@@ -64,6 +68,7 @@ def _check_damage(damage) -> None:
         if stage not in STAGES:
             raise ValueError(f"every damage step needs a stage from {STAGES}, got {stages}")
 
+    # Preserve chronological ordering: before-filter steps precede after-filter steps.
     seen_after_filter = False
     for stage in stages:
         if stage == "after_filter":
@@ -91,16 +96,19 @@ def _check_clip_events(clip, events) -> None:
         if not is_number:
             raise ValueError(f"clip {key} must be a number")
 
+        # Convert to float to validate finite values and numeric ranges.
         val = float(value)  # Now the type checker knows it's a valid numeric type
 
         if not np.isfinite(val):
             raise ValueError(f"clip {key} must be a finite number")
 
+        # Start time may be zero; duration and gain must be positive.
         if val < 0 or (key != "start_s" and val == 0):
             raise ValueError(f"clip {key} is out of range")
 
 
 def to_jsonable(value):
+    # Convert nested structures and NumPy values to JSON-compatible types.
     if isinstance(value, dict):
         return {str(key): to_jsonable(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
@@ -123,6 +131,7 @@ def build_record(
     clip=None,
     events=None,
 ) -> dict:
+    # Validate provenance fields before constructing the record.
     _check_example_id(example_id)
     _check_sources(sources)
     _check_damage(damage)
@@ -138,6 +147,7 @@ def build_record(
         "damage": damage,
     }
 
+    # Include optional clip and event metadata only when supplied.
     if clip is not None:
         record["clip"] = clip
     if events is not None:
@@ -147,6 +157,7 @@ def build_record(
 
 
 def write_record(record: dict, path) -> None:
+    # Use stable key ordering and a trailing newline for readable JSON output.
     text = json.dumps(to_jsonable(record), indent=2, sort_keys=True)
     Path(path).write_text(text + "\n", encoding="utf-8")
 
