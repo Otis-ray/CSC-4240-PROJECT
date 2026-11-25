@@ -1,13 +1,25 @@
-# Clone
-cd ~ \
-git clone -b source-only-release https://github.com/Otis-ray/CSC-4240-PROJECT.git CSC-4240-PROJECT-TEST \
+# Clone the Repository
+
+#Clone the `source-only-release` branch:
+
+```bash
+cd ~
+
+git clone -b source-only-release \
+    https://github.com/Otis-ray/CSC-4240-PROJECT.git \
+    CSC-4240-PROJECT-TEST
+
 cd ~/CSC-4240-PROJECT-TEST
 
+```
+
 # System dependencies
+
+```bash
 sudo apt update
 sudo apt install -y python3 python3-pip python3-venv \
     build-essential libfftw3-dev
-
+```
 # Compile C filter
 make -C Filters
 
