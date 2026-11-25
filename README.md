@@ -29,12 +29,31 @@ python -c "import numpy, scipy, sklearn, soundfile, joblib; print('Dependencies 
 python -m unittest discover -s Offline_app/tests -v
 
 # Install model weights manually before analysis
-Download the verification WAV file and pretrained models from
-https://drive.google.com/file/d/1yJGPyP7ZwDZJ5yGVMzZzs5qbkfgQXzpa/view?usp=sharing
-Put the WAV file in the project root directory (/CSC-4240-PROJECT-TEST)
-Merge the models directory with the project's models directory if already present. 
+Download the verification WAV file and pretrained models from \
+https://drive.google.com/file/d/1yJGPyP7ZwDZJ5yGVMzZzs5qbkfgQXzpa/view?usp=sharing \
+Put the WAV file in the project root directory (/CSC-4240-PROJECT-TEST) \
+Merge the models directory with the project's models directory if already present. \
 Otherwise, just copy and paste. 
 
-# After copying the three .joblib files:
-python -m Offline_app menu
+# After copying the three .joblib files run the following options:
+python -m Offline_app menu \
+enter '2' to select Analyze WAV recording \
+Select the option to use the 48kBounce_filt.wav\
+Select 'N' to perform the inverse filtering (direct Layer 2 diagnostic) \
+Leave LF isolation LP cutoff blank (just press enter) \ 
+Keep the default output directory (each run cannot be overwritten, so if you run this again, you will have to specify a new name)\
+An example would be results/analysis-new2\
+# The terminal output should resemble: 
+[1/3] Running Layer 1 prediction...\
+[2/3] Running C inverse filter...\
+[LF] Isolating LF below 186.872 Hz and classifying...\
+[Layer 2] Classifying noise windows...\
+[Complete] 61 windows; 2 events.
+# View manifest.json and report.json 
+The first instance puts them in \
+/CSC-4240-PROJECT-TEST/results/analysis-new
+
+
+
+
 
