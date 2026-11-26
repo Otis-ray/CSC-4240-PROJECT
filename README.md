@@ -58,6 +58,23 @@ An example would be results/analysis-new2
 The first instance puts them in \
 /CSC-4240-PROJECT-TEST/results/analysis-new
 
+# For training
+The training dataset is over 15 GB and cannot be easily hosted. \
+For this class project, the dataset can be obtained by request \
+The team will likely have copy it to an auditor's computer via a removable storage device 
+# Parameters used to train the model via the offline app:
+```bash
+Cutoff profile (realistic/unrestricted/custom) [realistic]: unrestricted
+Layer 1 training window (seconds, or full) [60]: 10
+Layer 1 examples per recording [10]: 5
+Train Layer 1? [Y/n]: y
+Train Layer 2 (full-band)? [Y/n]: y
+Train specialized LF model? [Y/n]: y
+LF training mode (standard/generalized) [standard]: 
+LF training window (seconds) [5]: 
+```
+
+
 
 
 
